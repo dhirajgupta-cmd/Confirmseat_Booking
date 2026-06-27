@@ -127,33 +127,6 @@ export default function WhyChooseUs() {
           ))}
         </div>
 
-        {/* Bottom Banner */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.3 }}
-          className="mt-16 bg-gradient-to-r from-[#5B3DF5] to-[#7C4DFF] rounded-3xl p-8 text-center text-white"
-        >
-          <h3
-            className="text-2xl font-bold mb-2"
-            style={{ fontFamily: "Poppins, sans-serif" }}
-          >
-            India's Most Trusted Train Ticket Marketplace
-          </h3>
-          <p className="text-purple-200 mb-6">
-            Join 50,000+ travelers who trust ConfirmSeat every day.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="bg-white text-[#5B3DF5] font-semibold px-8 py-3 rounded-xl hover:bg-purple-50 transition-all duration-200 shadow-lg">
-              Find Tickets Now
-            </button>
-            <button className="border-2 border-white text-white font-semibold px-8 py-3 rounded-xl hover:bg-white hover:text-[#5B3DF5] transition-all duration-200">
-              Sell My Ticket
-            </button>
-          </div>
-        </motion.div>
-
       </div>
     </section>
   );

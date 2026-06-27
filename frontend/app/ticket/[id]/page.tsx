@@ -1,54 +1,61 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
-  ShieldCheck,
-  Zap,
-  Star,
-  ArrowLeft,
-  Train,
-  Calendar,
-  MapPin,
-  User,
-  Lock,
-  CheckCircle,
+  ShieldCheck, Zap, Star, ArrowLeft, Lock, CheckCircle,
 } from "lucide-react";
 import Link from "next/link";
 import Navbar from "../../components/Navbar/Navbar";
-
-const ticket = {
-  id: "1",
-  trainName: "Gondwana Express",
-  trainNumber: "12416",
-  from: "Bhopal Junction",
-  fromCode: "BPL",
-  to: "Hazrat Nizamuddin",
-  toCode: "NZM",
-  departure: "06:15",
-  arrival: "13:10",
-  duration: "6h 55m",
-  date: "Saturday, 25 May 2025",
-  class: "3AC",
-  coach: "B2",
-  berth: "32",
-  seatType: "Lower",
-  price: 1850,
-  originalPrice: 2100,
-  pnr: "2345678901",
-  chartStatus: "Chart Not Prepared",
-  status: "Confirmed",
-  seller: {
-    name: "Rohit Verma",
-    rating: 4.8,
-    sales: 128,
-    responseRate: 98,
-    memberSince: "Jan 2024",
-    isVerified: true,
-    trustLevel: "Gold",
-  },
-};
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function TicketDetailPage() {
+  const { id } = useParams();
+  const [ticket, setTicket] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTicket = async () => {
+      try {
+        const docRef = doc(db, "tickets", id as string);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setTicket({ id: docSnap.id, ...docSnap.data() });
+        }
+      } catch (error) {
+        console.error("Error fetching ticket:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (id) fetchTicket();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC]">
+        <Navbar />
+        <div className="flex items-center justify-center h-96">
+          <div className="w-10 h-10 border-4 border-[#5B3DF5]/20 border-t-[#5B3DF5] rounded-full animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!ticket) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC]">
+        <Navbar />
+        <div className="flex flex-col items-center justify-center h-96 gap-4">
+          <p className="text-gray-500 text-lg font-semibold">Ticket not found!</p>
+          <Link href="/search" className="text-[#5B3DF5] underline text-sm">Back to Search</Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       <Navbar />
@@ -78,7 +85,7 @@ export default function TicketDetailPage() {
               <CheckCircle size={20} className="text-green-600" />
               <div>
                 <p className="text-green-800 font-bold text-sm">Confirmed Ticket</p>
-                <p className="text-green-600 text-xs">PNR: {ticket.pnr} · Chart Status: {ticket.chartStatus}</p>
+                <p className="text-green-600 text-xs">PNR: {ticket.pnr} · Status: {ticket.status}</p>
               </div>
             </motion.div>
 
@@ -97,19 +104,18 @@ export default function TicketDetailPage() {
                     <p className="text-xl font-bold">{ticket.trainName}</p>
                   </div>
                   <span className="bg-green-400 text-white text-xs font-bold px-3 py-1 rounded-full">
-                    {ticket.status}
+                    Confirmed
                   </span>
                 </div>
 
                 {/* Route */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-3xl font-bold">{ticket.departure}</p>
+                    <p className="text-3xl font-bold">{ticket.departureTime || "--:--"}</p>
                     <p className="text-sm opacity-75">{ticket.fromCode}</p>
                     <p className="text-xs opacity-60 mt-1">{ticket.from}</p>
                   </div>
                   <div className="flex flex-col items-center">
-                    <p className="text-xs opacity-75 mb-2">{ticket.duration}</p>
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-white/60" />
                       <div className="w-16 h-0.5 bg-white/40" />
@@ -117,10 +123,10 @@ export default function TicketDetailPage() {
                       <div className="w-16 h-0.5 bg-white/40" />
                       <div className="w-2 h-2 rounded-full bg-white/60" />
                     </div>
-                    <p className="text-xs opacity-60 mt-2">{ticket.date}</p>
+                    <p className="text-xs opacity-60 mt-2">{ticket.journeyDate}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-3xl font-bold">{ticket.arrival}</p>
+                    <p className="text-3xl font-bold">{ticket.arrivalTime || "--:--"}</p>
                     <p className="text-sm opacity-75">{ticket.toCode}</p>
                     <p className="text-xs opacity-60 mt-1">{ticket.to}</p>
                   </div>
@@ -131,10 +137,10 @@ export default function TicketDetailPage() {
               <div className="p-5">
                 <div className="grid grid-cols-4 gap-4">
                   {[
-                    { label: "Class", value: ticket.class },
+                    { label: "Class", value: ticket.trainClass },
                     { label: "Coach", value: ticket.coach },
                     { label: "Berth", value: ticket.berth },
-                    { label: "Seat Type", value: ticket.seatType },
+                    { label: "Seat Type", value: ticket.seatType || "N/A" },
                   ].map((item) => (
                     <div key={item.label} className="text-center bg-gray-50 rounded-xl p-3">
                       <p className="text-xs text-gray-400 mb-1">{item.label}</p>
@@ -155,30 +161,23 @@ export default function TicketDetailPage() {
               <h3 className="font-bold text-gray-900 mb-4">Seller Information</h3>
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 bg-[#5B3DF5] rounded-2xl flex items-center justify-center text-white text-xl font-bold">
-                  {ticket.seller.name.charAt(0)}
+                  {ticket.passengerName?.charAt(0) || "S"}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <p className="font-bold text-gray-900">{ticket.seller.name}</p>
-                    {ticket.seller.isVerified && (
-                      <ShieldCheck size={16} className="text-[#22C55E]" />
-                    )}
+                    <p className="font-bold text-gray-900">{ticket.passengerName || "Seller"}</p>
+                    <ShieldCheck size={16} className="text-[#22C55E]" />
                     <span className="bg-yellow-100 text-yellow-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                      {ticket.seller.trustLevel}
+                      Verified
                     </span>
                   </div>
                   <div className="flex items-center gap-3 text-sm text-gray-500">
                     <span className="flex items-center gap-1">
                       <Star size={13} className="text-yellow-500 fill-yellow-500" />
-                      {ticket.seller.rating}
+                      4.5
                     </span>
-                    <span>{ticket.seller.sales} Successful Sales</span>
-                    <span>Response Rate {ticket.seller.responseRate}%</span>
+                    <span>New Seller</span>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-400">Member since</p>
-                  <p className="text-sm font-semibold text-gray-700">{ticket.seller.memberSince}</p>
                 </div>
               </div>
             </motion.div>
@@ -224,7 +223,7 @@ export default function TicketDetailPage() {
               <div className="bg-gray-50 rounded-xl p-4 mb-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm text-gray-500">Ticket Price</span>
-                  <span className="font-semibold">₹{ticket.price.toLocaleString("en-IN")}</span>
+                  <span className="font-semibold">₹{ticket.price?.toLocaleString("en-IN")}</span>
                 </div>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm text-gray-500">Platform Fee</span>
@@ -233,7 +232,7 @@ export default function TicketDetailPage() {
                 <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between items-center">
                   <span className="font-bold text-gray-900">Total Amount</span>
                   <span className="text-2xl font-bold text-[#5B3DF5]">
-                    ₹{ticket.price.toLocaleString("en-IN")}
+                    ₹{ticket.price?.toLocaleString("en-IN")}
                   </span>
                 </div>
               </div>
@@ -245,7 +244,7 @@ export default function TicketDetailPage() {
                 className="w-full bg-[#5B3DF5] hover:bg-[#4930d4] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl mb-3 text-lg"
               >
                 <Lock size={18} />
-                Buy Now — ₹{ticket.price.toLocaleString("en-IN")}
+                Buy Now — ₹{ticket.price?.toLocaleString("en-IN")}
               </motion.button>
 
               {/* Payment Methods */}
@@ -253,10 +252,7 @@ export default function TicketDetailPage() {
                 <p className="text-xs text-gray-400 mb-2">Secure payment via</p>
                 <div className="flex justify-center gap-2 flex-wrap">
                   {["Razorpay", "UPI", "PhonePe", "GPay", "Paytm"].map((method) => (
-                    <span
-                      key={method}
-                      className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg font-medium"
-                    >
+                    <span key={method} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg font-medium">
                       {method}
                     </span>
                   ))}

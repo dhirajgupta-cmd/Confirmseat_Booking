@@ -1,7 +1,5 @@
 import Navbar from "./components/Navbar/Navbar";
 import Hero from "./components/Hero/Hero";
-import SearchSection from "./components/SearchSection/SearchSection";
-import FeaturedTickets from "./components/FeaturedTickets/FeaturedTickets";
 import LiveStats from "./components/LiveStats/LiveStats";
 import WhyChooseUs from "./components/WhyChooseUs/WhyChooseUs";
 import FAQ from "./components/FAQ/FAQ";
@@ -12,8 +10,6 @@ export default function Home() {
     <main>
       <Navbar />
       <Hero />
-      <SearchSection />
-      <FeaturedTickets />
       <LiveStats />
       <WhyChooseUs />
       <FAQ />

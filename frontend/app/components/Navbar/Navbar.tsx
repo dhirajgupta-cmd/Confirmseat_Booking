@@ -8,7 +8,7 @@ import Link from "next/link";
 
 const navLinks = [
   { label: "Home", href: "/" },
-  { label: "Find Tickets", href: "/search" },
+  { label: "Buy Ticket", href: "/search" },
   { label: "Sell Ticket", href: "/sell" },
   { label: "Support", href: "/support" },
 ];

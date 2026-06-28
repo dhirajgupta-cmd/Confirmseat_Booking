@@ -1,153 +1,320 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/authContext";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, Timestamp } from "firebase/firestore";
-
-import { useState } from "react";
+import { collection, addDoc, Timestamp, query, where, getDocs } from "firebase/firestore";
 import { motion } from "framer-motion";
 import {
   Upload, Train, MapPin, Calendar, IndianRupee,
-  ShieldCheck, ArrowRight, CheckCircle, Info, XCircle,
+  ShieldCheck, ArrowRight, CheckCircle, Info, XCircle, Lock, AlertTriangle,
 } from "lucide-react";
 import Navbar from "../components/Navbar/Navbar";
 
 const trainClasses = ["SL", "3AC", "2AC", "1AC", "CC", "EC"];
 const seatTypes = ["Lower", "Middle", "Upper", "Side Lower", "Side Upper"];
 
+const LISTING_REASONS = [
+  "Travel plans changed",
+  "Medical emergency",
+  "Got a better route",
+  "Work schedule conflict",
+  "Family reason",
+  "Other",
+];
+
+interface Passenger {
+  passengerSerialNumber: number;
+  bookingCoachId: string;
+  bookingBerthNo: number;
+  bookingBerthCode: string;
+  bookingStatus: string;
+  currentStatus: string;
+  bookingStatusDetails: string;
+}
+
 export default function SellTicketPage() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user) router.push("/login");
+  }, [user, loading, router]);
+
   const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [formLoading, setFormLoading] = useState(false);
   const [pnrLoading, setPnrLoading] = useState(false);
   const [pnrVerified, setPnrVerified] = useState<null | boolean>(null);
   const [pnrError, setPnrError] = useState("");
+  const [pnrLocked, setPnrLocked] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [originalPrice, setOriginalPrice] = useState<number | null>(null);
+  const [priceError, setPriceError] = useState("");
+
+  // Point 7 — Passenger list
+  const [passengerList, setPassengerList] = useState<Passenger[]>([]);
+  const [selectedPassengers, setSelectedPassengers] = useState<number[]>([]);
 
   const [form, setForm] = useState({
     pnr: "", trainNumber: "", trainName: "", from: "", fromCode: "",
     to: "", toCode: "", journeyDate: "", departureTime: "", arrivalTime: "",
     trainClass: "", coach: "", berth: "", seatType: "",
-    passengerName: "", passengerAge: "", price: "",
+    passengerName: "", passengerAge: "", gender: "",
+    price: "", listingReason: "",
   });
 
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-[#5B3DF5]/20 border-t-[#5B3DF5] rounded-full animate-spin" />
+          <p className="text-gray-500 text-sm font-medium">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-    if (e.target.name === "pnr") {
+    const { name, value } = e.target;
+
+    const lockedFields = ["trainNumber", "trainName", "from", "fromCode", "to", "toCode",
+      "journeyDate", "trainClass", "coach", "berth", "seatType"];
+    if (pnrLocked && lockedFields.includes(name)) return;
+
+    setForm((prev) => ({ ...prev, [name]: value }));
+
+    if (name === "pnr") {
       setPnrVerified(null);
       setPnrError("");
+      setPnrLocked(false);
+      setOriginalPrice(null);
+      setPassengerList([]);
+      setSelectedPassengers([]);
+    }
+
+    if (name === "price" && originalPrice) {
+      const entered = parseInt(value);
+      if (entered > originalPrice) {
+        setPriceError(`Price cannot exceed original ticket price of ₹${originalPrice.toLocaleString("en-IN")}`);
+      } else {
+        setPriceError("");
+      }
     }
   };
 
-  // ✅ REAL PNR VERIFY FUNCTION
-  // ✅ REAL PNR VERIFY FUNCTION
-const verifyPNR = async () => {
-  if (form.pnr.length !== 10) {
-    setPnrError("Please enter a valid 10-digit PNR number.");
-    return;
-  }
-  setPnrLoading(true);
-  setPnrVerified(null);
-  setPnrError("");
-  try {
-    const response = await fetch(
-      `https://irctc-indian-railway-pnr-status.p.rapidapi.com/getPNRStatus/${form.pnr}`,
-      {
-        method: "GET",
-        headers: {
-          "x-rapidapi-key": "1fdd3654b2msh711588d66484fafp1f5271jsnc6fce6dd98ee",
-          "x-rapidapi-host": "irctc-indian-railway-pnr-status.p.rapidapi.com",
-        },
-      }
+  // Point 7 — Passenger select karne pe fields auto-fill
+  const handlePassengerSelect = async (index: number) => {
+    const passenger = passengerList[index];
+    const berthNo = passenger.bookingBerthNo?.toString() || "";
+
+    if (selectedPassengers.includes(index)) {
+      setSelectedPassengers((prev) => prev.filter((i) => i !== index));
+      setPnrError("");
+      return;
+    }
+
+    const dupQuery = query(
+      collection(db, "tickets"),
+      where("pnr", "==", form.pnr),
+      where("berth", "==", berthNo),
+      where("status", "==", "available")
     );
-    const result = await response.json();
-    console.log("PNR API Response:", result);
+    const dupSnap = await getDocs(dupQuery);
+    if (!dupSnap.empty) {
+      setPnrError(`Seat ${passenger.bookingCoachId}/${berthNo} is already listed.`);
+      return;
+    }
 
-    if (result.success && result.data) {
-      const d = result.data;
-      const passenger = d.passengerList?.[0];
+    setPnrError("");
+    setSelectedPassengers((prev) => [...prev, index]);
+  };
 
-      // "Jun 29, 2026 10:35:00 PM" → "2026-06-29"
-      const parsedDate = d.dateOfJourney
-        ? new Date(d.dateOfJourney).toISOString().split("T")[0]
-        : "";
+  const verifyPNR = async () => {
+    if (form.pnr.length !== 10) {
+      setPnrError("Please enter a valid 10-digit PNR number.");
+      return;
+    }
+
+    setPnrLoading(true);
+    setPnrVerified(null);
+    setPnrError("");
+    setPassengerList([]);
+    setSelectedPassengers([]);
+
+    try {
+      const response = await fetch(
+        `https://irctc-indian-railway-pnr-status.p.rapidapi.com/getPNRStatus/${form.pnr}`,
+        {
+          method: "GET",
+          headers: {
+            "x-rapidapi-key": "1fdd3654b2msh711588d66484fafp1f5271jsnc6fce6dd98ee",
+            "x-rapidapi-host": "irctc-indian-railway-pnr-status.p.rapidapi.com",
+          },
+        }
+      );
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        const d = result.data;
+        const passengers: Passenger[] = d.passengerList || [];
+
+        // Point 3: Sirf CNF tickets
+        const hasConfirmed = passengers.some(
+          (p) => p.bookingStatus?.includes("CNF") || p.currentStatus?.includes("CNF")
+        );
+        if (!hasConfirmed) {
+          setPnrVerified(false);
+          setPnrError("Only Confirmed (CNF) tickets can be listed.");
+          setPnrLoading(false);
+          return;
+        }
+
+        // Point 2: Journey date past check
+        const parsedDate = d.dateOfJourney
+          ? new Date(d.dateOfJourney).toISOString().split("T")[0]
+          : "";
+        if (parsedDate) {
+          const journeyDate = new Date(parsedDate);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          if (journeyDate < today) {
+            setPnrVerified(false);
+            setPnrError("Journey date has already passed. This ticket cannot be listed.");
+            setPnrLoading(false);
+            return;
+          }
+        }
+
+        // Store original price
+        if (d.ticketFare) {
+          setOriginalPrice(parseInt(d.ticketFare));
+        }
+
+        // Point 5: Auto-fill locked fields
+        setForm((prev) => ({
+          ...prev,
+          trainNumber: d.trainNumber || "",
+          trainName: d.trainName || "",
+          from: d.boardingPoint || d.sourceStation || "",
+          fromCode: d.boardingPoint || d.sourceStation || "",
+          to: d.destinationStation || "",
+          toCode: d.destinationStation || "",
+          journeyDate: parsedDate,
+          trainClass: d.journeyClass || "",
+          // departureTime & arrivalTime NOT auto-filled — seller fills manually (Point 6)
+          coach: "",
+          berth: "",
+          seatType: "",
+        }));
+
+        // Point 7: Store passenger list for selection
+        setPassengerList(passengers);
+        setPnrLocked(true);
+        setPnrVerified(true);
+      } else {
+        setPnrVerified(false);
+        setPnrError("PNR not found. Please check and try again.");
+      }
+    } catch (err) {
+      console.error("PNR verify error:", err);
+      setPnrVerified(false);
+      setPnrError("Failed to verify PNR. Please try again.");
+    } finally {
+      setPnrLoading(false);
+    }
+  };
+
+  const handleNext = () => {
+    setFormLoading(true);
+    setTimeout(() => { setFormLoading(false); setStep(step + 1); }, 600);
+  };
+
+  const handleSubmit = async () => {
+    if (priceError) return;
+    setFormLoading(true);
+    setSubmitError("");
+
+    try {
+      const journeyDate = new Date(form.journeyDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (journeyDate < today) {
+        setSubmitError("Journey date has already passed. Cannot list this ticket.");
+        setFormLoading(false);
+        return;
+      }
 
       const berthMap: Record<string, string> = {
         "LB": "Lower", "MB": "Middle", "UB": "Upper",
         "SL": "Side Lower", "SU": "Side Upper",
       };
-
-      setForm((prev) => ({
-        ...prev,
-        trainNumber: d.trainNumber || "",
-        trainName: d.trainName || "",
-        from: d.boardingPoint || d.sourceStation || "",
-        fromCode: d.boardingPoint || d.sourceStation || "",
-        to: d.destinationStation || "",
-        toCode: d.destinationStation || "",
-        journeyDate: parsedDate,
-        trainClass: d.journeyClass || "",
-        coach: passenger?.bookingCoachId || "",
-        berth: passenger?.bookingBerthNo?.toString() || "",
-        seatType: berthMap[passenger?.bookingBerthCode || ""] || "",
-      }));
-
-      setPnrVerified(true);
-    } else {
-      setPnrVerified(false);
-      setPnrError("PNR not found. Please check and try again.");
+      const promises = selectedPassengers.map((index) => {
+        const passenger = passengerList[index];
+        return addDoc(collection(db, "tickets"), {
+          pnr: form.pnr,
+          trainNumber: form.trainNumber,
+          trainName: form.trainName,
+          from: form.from,
+          fromCode: form.fromCode,
+          to: form.to,
+          toCode: form.toCode,
+          journeyDate: form.journeyDate,
+          departureTime: form.departureTime,
+          arrivalTime: form.arrivalTime,
+          trainClass: form.trainClass,
+          coach: passenger.bookingCoachId || "",
+          berth: passenger.bookingBerthNo?.toString() || "",
+          seatType: berthMap[passenger.bookingBerthCode || ""] || "",
+          passengerName: form.passengerName,
+          passengerAge: form.passengerAge,
+          gender: form.gender,
+          price: parseInt(form.price),
+          originalPrice: originalPrice || parseInt(form.price),
+          listingReason: form.listingReason,
+          status: "available",
+          sellerId: user.uid,
+          pnrVerified: true,
+          createdAt: Timestamp.now(),
+          expiresAt: Timestamp.fromDate(new Date(form.journeyDate)),
+        });
+      });
+      await Promise.all(promises);
+      setStep(4);
+    } catch (error) {
+      console.error("Error saving ticket:", error);
+      setSubmitError("Something went wrong. Please try again.");
+    } finally {
+      setFormLoading(false);
     }
-  } catch (err) {
-    console.error("PNR verify error:", err);
-    setPnrVerified(false);
-    setPnrError("Failed to verify PNR. Please try again.");
-  } finally {
-    setPnrLoading(false);
-  }
-};
-
-  const handleNext = () => {
-    setLoading(true);
-    setTimeout(() => { setLoading(false); setStep(step + 1); }, 800);
   };
 
-   const handleSubmit = async () => {
-  setLoading(true);
-  try {
-    await addDoc(collection(db, "tickets"), {
-      pnr: form.pnr,
-      trainNumber: form.trainNumber,
-      trainName: form.trainName,
-      from: form.from,
-      fromCode: form.fromCode,
-      to: form.to,
-      toCode: form.toCode,
-      journeyDate: form.journeyDate,
-      departureTime: form.departureTime,
-      arrivalTime: form.arrivalTime,
-      trainClass: form.trainClass,
-      coach: form.coach,
-      berth: form.berth,
-      seatType: form.seatType,
-      passengerName: form.passengerName,
-      passengerAge: form.passengerAge,
-      price: parseInt(form.price),
-      status: "available",
-      createdAt: Timestamp.now(),
+  const resetForm = () => {
+    setStep(1);
+    setPnrVerified(null);
+    setPnrError("");
+    setPnrLocked(false);
+    setOriginalPrice(null);
+    setPriceError("");
+    setSubmitError("");
+    setPassengerList([]);
+    setSelectedPassengers([]);
+    setForm({
+      pnr: "", trainNumber: "", trainName: "", from: "", fromCode: "",
+      to: "", toCode: "", journeyDate: "", departureTime: "", arrivalTime: "",
+      trainClass: "", coach: "", berth: "", seatType: "",
+      passengerName: "", passengerAge: "", gender: "", price: "", listingReason: "",
     });
-    setStep(4);
-  } catch (error) {
-    console.error("Error saving ticket:", error);
-    alert("Something went wrong! Please try again.");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
+  const lockedInput = "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm bg-gray-50 text-gray-500 cursor-not-allowed";
+  const normalInput = "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all";
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       <Navbar />
-
       <div className="max-w-3xl mx-auto px-4 pt-24 pb-12">
 
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2" style={{ fontFamily: "Poppins, sans-serif" }}>
             Sell Your Ticket
@@ -167,210 +334,288 @@ const verifyPNR = async () => {
                 }`}>
                   {step > index + 1 ? <CheckCircle size={16} /> : index + 1}
                 </div>
-                <p className={`text-xs mt-1 font-medium ${step === index + 1 ? "text-[#5B3DF5]" : "text-gray-400"}`}>
-                  {label}
-                </p>
+                <p className={`text-xs mt-1 font-medium ${step === index + 1 ? "text-[#5B3DF5]" : "text-gray-400"}`}>{label}</p>
               </div>
-              {index < 3 && (
-                <div className={`w-12 h-0.5 mb-4 ${step > index + 1 ? "bg-green-500" : "bg-gray-200"}`} />
-              )}
+              {index < 3 && <div className={`w-12 h-0.5 mb-4 ${step > index + 1 ? "bg-green-500" : "bg-gray-200"}`} />}
             </div>
           ))}
         </div>
 
-        {/* Step 1 — Ticket Details */}
+        {/* STEP 1 */}
         {step === 1 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
             className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-
             <h2 className="font-bold text-gray-900 mb-5 flex items-center gap-2">
               <Train size={20} className="text-[#5B3DF5]" /> Train Details
             </h2>
 
-            {/* PNR INPUT */}
+            {/* PNR */}
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">PNR Number</label>
               <div className="flex gap-3">
                 <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    name="pnr"
-                    placeholder="Enter 10-digit PNR"
-                    value={form.pnr}
-                    onChange={handleChange}
-                    maxLength={10}
+                  <input type="text" name="pnr" placeholder="Enter 10-digit PNR" value={form.pnr}
+                    onChange={handleChange} maxLength={10} disabled={pnrLocked}
                     className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-all ${
-                      pnrVerified === true
-                        ? "border-green-400 focus:border-green-400 focus:ring-green-100"
-                        : pnrVerified === false
-                        ? "border-red-400 focus:border-red-400 focus:ring-red-100"
-                        : "border-gray-200 focus:border-[#5B3DF5] focus:ring-[#5B3DF5]/10"
-                    }`}
-                  />
-                  {/* Status icon inside input */}
-                  {pnrVerified === true && (
-                    <CheckCircle size={18} className="absolute right-3 top-3.5 text-green-500" />
-                  )}
-                  {pnrVerified === false && (
-                    <XCircle size={18} className="absolute right-3 top-3.5 text-red-500" />
-                  )}
+                      pnrVerified === true ? "border-green-400 bg-green-50"
+                      : pnrVerified === false ? "border-red-400 focus:ring-red-100"
+                      : "border-gray-200 focus:border-[#5B3DF5] focus:ring-[#5B3DF5]/10"
+                    } ${pnrLocked ? "cursor-not-allowed" : ""}`} />
+                  {pnrVerified === true && <CheckCircle size={18} className="absolute right-3 top-3.5 text-green-500" />}
+                  {pnrVerified === false && <XCircle size={18} className="absolute right-3 top-3.5 text-red-500" />}
                 </div>
-
-                <button
-                  onClick={verifyPNR}
-                  disabled={pnrLoading || form.pnr.length !== 10}
-                  className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${
-                    pnrVerified === true
-                      ? "bg-green-500 text-white"
+                {pnrLocked ? (
+                  <button onClick={() => { setPnrLocked(false); setPnrVerified(null); setPassengerList([]); setSelectedPassengers([]); }}
+                    className="px-5 py-3 rounded-xl text-sm font-semibold bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all flex items-center gap-2">
+                    <XCircle size={15} /> Reset
+                  </button>
+                ) : (
+                  <button onClick={verifyPNR} disabled={pnrLoading || form.pnr.length !== 10}
+                    className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${
+                      pnrVerified === true ? "bg-green-500 text-white"
                       : "bg-[#EEF2FF] text-[#5B3DF5] hover:bg-[#5B3DF5] hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                  }`}
-                >
-                  {pnrLoading ? (
-                    <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
-                  ) : pnrVerified === true ? (
-                    <><CheckCircle size={15} /> Verified</>
-                  ) : (
-                    "Verify PNR"
-                  )}
-                </button>
+                    }`}>
+                    {pnrLoading
+                      ? <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+                      : pnrVerified === true ? <><CheckCircle size={15} /> Verified</> : "Verify PNR"}
+                  </button>
+                )}
               </div>
 
-              {/* Error message */}
               {pnrError && (
-                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                  <XCircle size={12} /> {pnrError}
+                <p className="text-xs text-red-500 mt-2 flex items-start gap-1">
+                  <XCircle size={12} className="mt-0.5 flex-shrink-0" /> {pnrError}
                 </p>
               )}
-
-              {/* Success message */}
               {pnrVerified === true && (
                 <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                  <CheckCircle size={12} /> PNR verified! Details auto-filled below.
+                  <CheckCircle size={12} /> PNR verified! Select your seat below.
                 </p>
               )}
-
               {!pnrVerified && !pnrError && (
                 <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                  <Info size={12} /> We will verify your PNR with IRCTC
+                  <Info size={12} /> Only CNF tickets can be listed. We verify with IRCTC.
                 </p>
               )}
             </div>
 
-            {/* Auto-filled success banner */}
-            {pnrVerified === true && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4 flex items-center gap-2"
-              >
-                <CheckCircle size={16} className="text-green-600 flex-shrink-0" />
+            {/* Point 7 — Passenger Selection */}
+            {pnrVerified === true && passengerList.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+                className="mb-5 bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <p className="text-sm font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                  <Info size={15} /> Select YOUR seat from the booking:
+                </p>
+                <div className="space-y-2">
+                  {passengerList.map((passenger, index) => {
+                    const berthMap: Record<string, string> = {
+                      "LB": "Lower", "MB": "Middle", "UB": "Upper",
+                      "SL": "Side Lower", "SU": "Side Upper",
+                    };
+                    const seatLabel = `Coach ${passenger.bookingCoachId} · Berth ${passenger.bookingBerthNo} · ${berthMap[passenger.bookingBerthCode] || passenger.bookingBerthCode}`;
+                    const isConfirmed = passenger.bookingStatus?.includes("CNF") || passenger.currentStatus?.includes("CNF");
+                    const isSelected = selectedPassengers.includes(index);
+
+                    return (
+                      <button key={index}
+                        onClick={() => isConfirmed && handlePassengerSelect(index)}
+                        disabled={!isConfirmed}
+                        className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all flex items-center justify-between ${
+                          isSelected
+                            ? "border-[#5B3DF5] bg-[#EEF2FF]"
+                            : isConfirmed
+                            ? "border-gray-200 bg-white hover:border-[#5B3DF5] hover:bg-gray-50"
+                            : "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed"
+                        }`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                            isSelected ? "border-[#5B3DF5] bg-[#5B3DF5]" : "border-gray-300 bg-white"
+                          }`}>
+                            {isSelected && <CheckCircle size={12} className="text-white" />}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-800">Passenger {passenger.passengerSerialNumber}</p>
+                            <p className="text-xs text-gray-500">{seatLabel}</p>
+                          </div>
+                        </div>
+                        <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                          isConfirmed ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
+                        }`}>
+                          {passenger.currentStatus || passenger.bookingStatus}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedPassengers.length === 0 ? (
+                  <p className="text-xs text-blue-600 mt-2 flex items-center gap-1">
+                    <AlertTriangle size={11} /> Please select at least one seat.
+                  </p>
+                ) : (
+                  <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                    <CheckCircle size={11} /> {selectedPassengers.length} seat(s) selected — {selectedPassengers.length} listing(s) will be created.
+                  </p>
+                )}
+              </motion.div>
+            )}
+
+            {/* Locked banner */}
+            {pnrLocked && (
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+                className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4 flex items-center gap-2">
+                <Lock size={15} className="text-green-600 flex-shrink-0" />
                 <p className="text-sm text-green-700 font-medium">
-                  Train details auto-filled from IRCTC. Please review and correct if needed.
+                  Fields locked after PNR verification. Click Reset to change PNR.
                 </p>
               </motion.div>
             )}
 
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Train Number</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Train Number {pnrLocked && <Lock size={11} className="inline text-gray-400 ml-1" />}
+                </label>
                 <input type="text" name="trainNumber" placeholder="e.g. 12416" value={form.trainNumber}
-                  onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all" />
+                  onChange={handleChange} disabled={pnrLocked}
+                  className={pnrLocked ? lockedInput : normalInput} />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Train Name</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Train Name {pnrLocked && <Lock size={11} className="inline text-gray-400 ml-1" />}
+                </label>
                 <input type="text" name="trainName" placeholder="e.g. Gondwana Express" value={form.trainName}
-                  onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all" />
+                  onChange={handleChange} disabled={pnrLocked}
+                  className={pnrLocked ? lockedInput : normalInput} />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <MapPin size={14} className="inline mr-1 text-[#5B3DF5]" /> From Station
+                  <MapPin size={14} className="inline mr-1 text-[#5B3DF5]" /> From Station {pnrLocked && <Lock size={11} className="inline text-gray-400" />}
                 </label>
                 <input type="text" name="from" placeholder="e.g. Bhopal Junction" value={form.from}
-                  onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all" />
+                  onChange={handleChange} disabled={pnrLocked}
+                  className={pnrLocked ? lockedInput : normalInput} />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Station Code</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Station Code {pnrLocked && <Lock size={11} className="inline text-gray-400" />}
+                </label>
                 <input type="text" name="fromCode" placeholder="e.g. BPL" value={form.fromCode}
-                  onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all" />
+                  onChange={handleChange} disabled={pnrLocked}
+                  className={pnrLocked ? lockedInput : normalInput} />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <MapPin size={14} className="inline mr-1 text-purple-400" /> To Station
+                  <MapPin size={14} className="inline mr-1 text-purple-400" /> To Station {pnrLocked && <Lock size={11} className="inline text-gray-400" />}
                 </label>
                 <input type="text" name="to" placeholder="e.g. Delhi" value={form.to}
-                  onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all" />
+                  onChange={handleChange} disabled={pnrLocked}
+                  className={pnrLocked ? lockedInput : normalInput} />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Station Code</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Station Code {pnrLocked && <Lock size={11} className="inline text-gray-400" />}
+                </label>
                 <input type="text" name="toCode" placeholder="e.g. NDLS" value={form.toCode}
-                  onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all" />
+                  onChange={handleChange} disabled={pnrLocked}
+                  className={pnrLocked ? lockedInput : normalInput} />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Calendar size={14} className="inline mr-1 text-[#5B3DF5]" /> Journey Date
+                  <Calendar size={14} className="inline mr-1 text-[#5B3DF5]" /> Journey Date {pnrLocked && <Lock size={11} className="inline text-gray-400" />}
                 </label>
-                <input type="date" name="journeyDate" value={form.journeyDate} onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all" />
+                <input type="date" name="journeyDate" value={form.journeyDate}
+                  onChange={handleChange} disabled={pnrLocked}
+                  className={pnrLocked ? lockedInput : normalInput} />
+              </div>
+              {/* Point 6 — Seller manually fills time — COMPULSORY */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Departure Time <span className="text-red-400">*</span>
+                </label>
+                <input type="time" name="departureTime" value={form.departureTime}
+                  onChange={handleChange}
+                  className={normalInput} />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Departure Time</label>
-                <input type="time" name="departureTime" value={form.departureTime} onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all" />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Arrival Time</label>
-                <input type="time" name="arrivalTime" value={form.arrivalTime} onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all" />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Arrival Time <span className="text-red-400">*</span>
+                </label>
+                <input type="time" name="arrivalTime" value={form.arrivalTime}
+                  onChange={handleChange}
+                  className={normalInput} />
               </div>
             </div>
 
+            {/* Point 6 info banner */}
+            {pnrVerified === true && (!form.departureTime || !form.arrivalTime) && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4 flex items-center gap-2">
+                <AlertTriangle size={15} className="text-yellow-600 flex-shrink-0" />
+                <p className="text-sm text-yellow-700">
+                  Please enter Departure and Arrival time from your IRCTC ticket. This is mandatory.
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-4 mb-6">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Class</label>
-                <select name="trainClass" value={form.trainClass} onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all bg-white">
-                  <option value="">Select Class</option>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Class {pnrLocked && <Lock size={11} className="inline text-gray-400" />}
+                </label>
+                <select name="trainClass" value={form.trainClass} onChange={handleChange} disabled={pnrLocked}
+                  className={pnrLocked ? lockedInput : normalInput + " bg-white"}>
+                  <option value="">Select</option>
                   {trainClasses.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Coach</label>
-                <input type="text" name="coach" placeholder="e.g. B2" value={form.coach} onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all" />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Coach {pnrLocked && <Lock size={11} className="inline text-gray-400" />}
+                </label>
+                <input type="text" name="coach" value={selectedPassengers.length > 0 ? selectedPassengers.map(i => passengerList[i]?.bookingCoachId).join(", ") : "Select seat above"}
+                  onChange={handleChange} disabled={pnrLocked}
+                  className={pnrLocked ? lockedInput : normalInput} />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Berth No.</label>
-                <input type="text" name="berth" placeholder="e.g. 32" value={form.berth} onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all" />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Berth No. {pnrLocked && <Lock size={11} className="inline text-gray-400" />}
+                </label>
+                <input type="text" name="berth" value={selectedPassengers.length > 0 ? selectedPassengers.map(i => passengerList[i]?.bookingBerthNo).join(", ") : "Select seat above"}
+                  onChange={handleChange} disabled={pnrLocked}
+                  className={pnrLocked ? lockedInput : normalInput} />
               </div>
             </div>
 
             <button onClick={handleNext}
-              disabled={!form.pnr || !form.trainName || !form.from || !form.to || loading}
+              disabled={
+                !form.pnr || !form.trainName || !form.from || !form.to ||
+                !pnrVerified || !form.departureTime || !form.arrivalTime ||
+                selectedPassengers.length === 0 || formLoading
+              }
               className="w-full bg-[#5B3DF5] hover:bg-[#4930d4] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg">
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : <>Next — Passenger Info <ArrowRight size={18} /></>}
+              {formLoading
+                ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                : <>Next — Passenger Info <ArrowRight size={18} /></>}
             </button>
+
+            {pnrVerified && selectedPassengers.length === 0 && (
+              <p className="text-center text-xs text-red-400 mt-2">Please select at least one seat</p>
+            )}
+            {pnrVerified && selectedPassengers.length > 0 && (!form.departureTime || !form.arrivalTime) && (
+              <p className="text-center text-xs text-red-400 mt-2">Please fill Departure and Arrival time</p>
+            )}
           </motion.div>
         )}
 
-        {/* Step 2 — Passenger Info (unchanged) */}
+        {/* STEP 2 */}
         {step === 2 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
             className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -382,7 +627,7 @@ const verifyPNR = async () => {
             </div>
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Gender</label>
-              <select name="gender" value={(form as any).gender || ""} onChange={handleChange}
+              <select name="gender" value={form.gender} onChange={handleChange}
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all bg-white">
                 <option value="">Select Gender</option>
                 <option value="Male">Male</option>
@@ -393,23 +638,26 @@ const verifyPNR = async () => {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Passenger Name</label>
                 <input type="text" name="passengerName" placeholder="As on ticket" value={form.passengerName}
-                  onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all" />
+                  onChange={handleChange} className={normalInput} />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Age</label>
                 <input type="number" name="passengerAge" placeholder="e.g. 28" value={form.passengerAge}
-                  onChange={handleChange}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all" />
+                  onChange={handleChange} className={normalInput} />
               </div>
             </div>
             <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Seat Type</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Seat Type {pnrLocked && <Lock size={11} className="inline text-gray-400 ml-1" />}
+              </label>
               <div className="flex flex-wrap gap-2">
                 {seatTypes.map((type) => (
-                  <button key={type} onClick={() => setForm({ ...form, seatType: type })}
+                  <button key={type}
+                    onClick={() =>  setForm({ ...form, seatType: type })}
                     className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                      form.seatType === type ? "bg-[#5B3DF5] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      form.seatType === type ? "bg-[#5B3DF5] text-white"
+                      : pnrLocked ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                     }`}>{type}</button>
                 ))}
               </div>
@@ -421,7 +669,7 @@ const verifyPNR = async () => {
                 <p className="text-sm font-medium text-gray-700">Drag & drop or click to upload</p>
                 <p className="text-xs text-gray-400 mt-1">PDF, JPG, PNG — Max 5MB</p>
                 <div className="flex items-center justify-center gap-3 mt-3 text-xs text-gray-400">
-                  <ShieldCheck size={12} className="text-green-500" /> Encrypted & stored securely on AWS S3
+                  <ShieldCheck size={12} className="text-green-500" /> Encrypted & stored securely
                 </div>
               </div>
             </div>
@@ -430,34 +678,56 @@ const verifyPNR = async () => {
                 className="flex-1 border border-gray-200 text-gray-600 font-semibold py-4 rounded-xl hover:border-[#5B3DF5] transition-all">
                 Back
               </button>
-              <button onClick={handleNext} disabled={!form.passengerName || loading}
+              <button onClick={handleNext} disabled={!form.passengerName || formLoading}
                 className="flex-1 bg-[#5B3DF5] hover:bg-[#4930d4] disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg">
-                {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                {formLoading
+                  ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   : <>Next — Set Price <ArrowRight size={18} /></>}
               </button>
             </div>
           </motion.div>
         )}
 
-        {/* Step 3 — Set Price (unchanged) */}
+        {/* STEP 3 */}
         {step === 3 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
             className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <h2 className="font-bold text-gray-900 mb-5 flex items-center gap-2">
               <IndianRupee size={20} className="text-[#5B3DF5]" /> Set Your Price
             </h2>
-            <div className="mb-6">
+
+            {originalPrice && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 flex items-center gap-2">
+                <Info size={15} className="text-blue-600 flex-shrink-0" />
+                <p className="text-sm text-blue-700">
+                  Original IRCTC price: <span className="font-bold">₹{originalPrice.toLocaleString("en-IN")}</span>. You cannot list above this.
+                </p>
+              </div>
+            )}
+
+            <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Listing Price (₹)</label>
               <div className="relative">
                 <span className="absolute left-4 top-3.5 text-gray-500 font-semibold">₹</span>
-                <input type="number" name="price" placeholder="Enter amount" value={form.price} onChange={handleChange}
-                  className="w-full pl-8 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#5B3DF5] transition-all text-lg font-bold" />
+                <input type="number" name="price" placeholder="Enter amount" value={form.price}
+                  onChange={handleChange}
+                  className={`w-full pl-8 pr-4 py-3 border rounded-xl text-sm focus:outline-none transition-all text-lg font-bold ${
+                    priceError ? "border-red-400" : "border-gray-200 focus:border-[#5B3DF5]"
+                  }`} />
               </div>
-              <p className="text-xs text-gray-400 mt-2">You cannot list above the original IRCTC ticket price.</p>
+              {priceError && (
+                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                  <AlertTriangle size={12} /> {priceError}
+                </p>
+              )}
+              {!priceError && (
+                <p className="text-xs text-gray-400 mt-2">You cannot list above the original IRCTC ticket price.</p>
+              )}
             </div>
-            {form.price && (
+
+            {form.price && !priceError && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="bg-gray-50 rounded-xl p-4 mb-6">
+                className="bg-gray-50 rounded-xl p-4 mb-5">
                 <h3 className="font-semibold text-gray-700 mb-3 text-sm">Price Breakdown</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -475,34 +745,66 @@ const verifyPNR = async () => {
                 </div>
               </motion.div>
             )}
-            <div className="bg-[#EEF2FF] border border-[#C7D2FE] rounded-xl p-4 mb-6">
+
+            {/* Point 9 — Listing Reason */}
+            <div className="mb-5">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Why are you selling this ticket? <span className="text-red-400">*</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {LISTING_REASONS.map((reason) => (
+                  <button key={reason}
+                    onClick={() => setForm({ ...form, listingReason: reason })}
+                    className={`px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
+                      form.listingReason === reason
+                        ? "bg-[#5B3DF5] text-white border-[#5B3DF5]"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-[#5B3DF5]"
+                    }`}>{reason}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-[#EEF2FF] border border-[#C7D2FE] rounded-xl p-4 mb-5">
               <p className="text-sm text-[#4338CA] font-semibold mb-2">Before you submit:</p>
               <ul className="space-y-1 text-xs text-[#5B3DF5]">
-                {["Ticket will be verified by our team within 15 minutes",
+                {[
+                  "Only CNF confirmed tickets are accepted",
+                  "Ticket will be verified by our team within 15 minutes",
                   "You will receive payment after the journey is completed",
                   "Do not cancel the ticket after listing it here",
-                  "Fake listings will result in permanent account ban"].map((point) => (
+                  "Fake listings will result in permanent account ban",
+                ].map((point) => (
                   <li key={point} className="flex items-start gap-2">
                     <CheckCircle size={12} className="mt-0.5 flex-shrink-0" /> {point}
                   </li>
                 ))}
               </ul>
             </div>
+
+            {submitError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 flex items-center gap-2">
+                <AlertTriangle size={15} className="text-red-500 flex-shrink-0" />
+                <p className="text-sm text-red-600">{submitError}</p>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button onClick={() => setStep(2)}
                 className="flex-1 border border-gray-200 text-gray-600 font-semibold py-4 rounded-xl hover:border-[#5B3DF5] transition-all">
                 Back
               </button>
-              <button onClick={handleSubmit} disabled={!form.price || loading}
+              <button onClick={handleSubmit}
+                disabled={!form.price || !!priceError || !form.listingReason || formLoading}
                 className="flex-1 bg-[#5B3DF5] hover:bg-[#4930d4] disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg">
-                {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                {formLoading
+                  ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   : <>Submit Listing <ArrowRight size={18} /></>}
               </button>
             </div>
           </motion.div>
         )}
 
-        {/* Step 4 — Success (unchanged) */}
+        {/* STEP 4 — Success */}
         {step === 4 && (
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
             className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
@@ -530,29 +832,30 @@ const verifyPNR = async () => {
                 <span className="font-semibold">{form.journeyDate}</span>
               </div>
               <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Seat</span>
+                <span className="font-semibold">Coach {form.coach} · Berth {form.berth}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Reason</span>
+                <span className="font-semibold">{form.listingReason}</span>
+              </div>
+              <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Price</span>
                 <span className="font-bold text-[#5B3DF5]">₹{parseInt(form.price).toLocaleString("en-IN")}</span>
               </div>
             </div>
-                         <div className="flex gap-3">
-  <button onClick={() => window.location.href = "/"}
-    className="flex-1 bg-[#5B3DF5] text-white font-semibold py-3 rounded-xl hover:bg-[#4930d4] transition-all flex items-center justify-center gap-2">
-    <ArrowRight size={18} /> Continue to Home
-  </button>
-  <button onClick={() => {
-    setStep(1);
-    setPnrVerified(null);
-    setPnrError("");
-    setForm({ pnr: "", trainNumber: "", trainName: "", from: "", fromCode: "", to: "", toCode: "",
-      journeyDate: "", departureTime: "", arrivalTime: "", trainClass: "", coach: "", berth: "",
-      seatType: "", passengerName: "", passengerAge: "", price: "" });
-  }} className="flex-1 border border-gray-200 text-gray-600 font-semibold py-3 rounded-xl hover:border-[#5B3DF5] transition-all">
-    List Another Ticket
-  </button>
-</div>
+            <div className="flex gap-3">
+              <button onClick={() => router.push("/")}
+                className="flex-1 bg-[#5B3DF5] text-white font-semibold py-3 rounded-xl hover:bg-[#4930d4] transition-all flex items-center justify-center gap-2">
+                <ArrowRight size={18} /> Continue to Home
+              </button>
+              <button onClick={resetForm}
+                className="flex-1 border border-gray-200 text-gray-600 font-semibold py-3 rounded-xl hover:border-[#5B3DF5] transition-all">
+                List Another Ticket
+              </button>
+            </div>
           </motion.div>
         )}
-
       </div>
     </div>
   );

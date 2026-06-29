@@ -54,6 +54,7 @@ export default function SellTicketPage() {
 
   // Point 7 — Passenger list
   const [passengerList, setPassengerList] = useState<Passenger[]>([]);
+   const [passengerForms, setPassengerForms] = useState<{name: string; age: string; gender: string}[]>([]);
   const [selectedPassengers, setSelectedPassengers] = useState<number[]>([]);
 
   const [form, setForm] = useState({
@@ -91,6 +92,7 @@ export default function SellTicketPage() {
       setOriginalPrice(null);
       setPassengerList([]);
       setSelectedPassengers([]);
+      setPassengerForms([]);
     }
 
     if (name === "price" && originalPrice) {
@@ -187,8 +189,9 @@ export default function SellTicketPage() {
         }
 
         // Store original price
-        if (d.ticketFare) {
-          setOriginalPrice(parseInt(d.ticketFare));
+        if (d.ticketFare && d.numberOfpassenger) {
+          const perSeatPrice = Math.floor(parseInt(d.ticketFare) / d.numberOfpassenger);
+           setOriginalPrice(perSeatPrice);
         }
 
         // Point 5: Auto-fill locked fields
@@ -226,10 +229,18 @@ export default function SellTicketPage() {
   };
 
   const handleNext = () => {
-    setFormLoading(true);
-    setTimeout(() => { setFormLoading(false); setStep(step + 1); }, 600);
-  };
-
+  setFormLoading(true);
+  setTimeout(() => {
+    // Step 1 se Step 2 jaate waqt passenger forms initialize karo
+    if (step === 1) {
+      setPassengerForms(
+        selectedPassengers.map(() => ({ name: "", age: "", gender: "" }))
+      );
+    }
+    setFormLoading(false);
+    setStep(step + 1);
+  }, 600);
+};
   const handleSubmit = async () => {
     if (priceError) return;
     setFormLoading(true);
@@ -266,9 +277,9 @@ export default function SellTicketPage() {
           coach: passenger.bookingCoachId || "",
           berth: passenger.bookingBerthNo?.toString() || "",
           seatType: berthMap[passenger.bookingBerthCode || ""] || "",
-          passengerName: form.passengerName,
-          passengerAge: form.passengerAge,
-          gender: form.gender,
+          passengerName: passengerForms[index]?.name || "",
+          passengerAge: passengerForms[index]?.age || "",
+          gender: passengerForms[index]?.gender || "",
           price: parseInt(form.price),
           originalPrice: originalPrice || parseInt(form.price),
           listingReason: form.listingReason,
@@ -298,7 +309,7 @@ export default function SellTicketPage() {
     setPriceError("");
     setSubmitError("");
     setPassengerList([]);
-    setSelectedPassengers([]);
+    setPassengerForms([]);
     setForm({
       pnr: "", trainNumber: "", trainName: "", from: "", fromCode: "",
       to: "", toCode: "", journeyDate: "", departureTime: "", arrivalTime: "",
@@ -387,6 +398,8 @@ export default function SellTicketPage() {
                   <XCircle size={12} className="mt-0.5 flex-shrink-0" /> {pnrError}
                 </p>
               )}
+
+
               {pnrVerified === true && (
                 <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
                   <CheckCircle size={12} /> PNR verified! Select your seat below.
@@ -618,75 +631,96 @@ export default function SellTicketPage() {
         {/* STEP 2 */}
         {step === 2 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <h2 className="font-bold text-gray-900 mb-5">Passenger Information</h2>
+          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+           <h2 className="font-bold text-gray-900 mb-5">Passenger Information</h2>
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-5">
               <p className="text-sm text-yellow-800 flex items-center gap-2">
-                <Info size={16} /> Passenger name must match exactly with your IRCTC ticket.
-              </p>
-            </div>
-            <div className="mb-4">
+        <Info size={16} /> Fill details for each seat separately. Name must match IRCTC ticket.
+       </p>
+    </div>
+
+    <div className="space-y-6">
+      {selectedPassengers.map((pIndex, formIndex) => {
+        const passenger = passengerList[pIndex];
+        const berthMap: Record<string, string> = {
+          "LB": "Lower", "MB": "Middle", "UB": "Upper",
+          "SL": "Side Lower", "SU": "Side Upper",
+        };
+        return (
+          <div key={formIndex} className="border border-gray-200 rounded-xl p-4">
+            <p className="text-sm font-bold text-[#5B3DF5] mb-3">
+              Seat {formIndex + 1} — Coach {passenger.bookingCoachId} · Berth {passenger.bookingBerthNo} · {berthMap[passenger.bookingBerthCode] || passenger.bookingBerthCode}
+            </p>
+            <div className="mb-3">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Gender</label>
-              <select name="gender" value={form.gender} onChange={handleChange}
+              <select value={passengerForms[formIndex]?.gender || ""}
+                onChange={(e) => {
+                  const updated = [...passengerForms];
+                  updated[formIndex] = { ...updated[formIndex], gender: e.target.value };
+                  setPassengerForms(updated);
+                }}
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5B3DF5] transition-all bg-white">
                 <option value="">Select Gender</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Passenger Name</label>
-                <input type="text" name="passengerName" placeholder="As on ticket" value={form.passengerName}
-                  onChange={handleChange} className={normalInput} />
+                <input type="text" placeholder="As on ticket"
+                  value={passengerForms[formIndex]?.name || ""}
+                  onChange={(e) => {
+                    const updated = [...passengerForms];
+                    updated[formIndex] = { ...updated[formIndex], name: e.target.value };
+                    setPassengerForms(updated);
+                  }}
+                  className={normalInput} />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Age</label>
-                <input type="number" name="passengerAge" placeholder="e.g. 28" value={form.passengerAge}
-                  onChange={handleChange} className={normalInput} />
+                <input type="number" placeholder="e.g. 28"
+                  value={passengerForms[formIndex]?.age || ""}
+                  onChange={(e) => {
+                    const updated = [...passengerForms];
+                    updated[formIndex] = { ...updated[formIndex], age: e.target.value };
+                    setPassengerForms(updated);
+                  }}
+                  className={normalInput} />
               </div>
             </div>
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Seat Type {pnrLocked && <Lock size={11} className="inline text-gray-400 ml-1" />}
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {seatTypes.map((type) => (
-                  <button key={type}
-                    onClick={() =>  setForm({ ...form, seatType: type })}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                      form.seatType === type ? "bg-[#5B3DF5] text-white"
-                      : pnrLocked ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}>{type}</button>
-                ))}
-              </div>
-            </div>
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Upload Ticket PDF / Screenshot</label>
-              <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-[#5B3DF5] transition-all cursor-pointer">
-                <Upload size={32} className="text-[#5B3DF5] mx-auto mb-3" />
-                <p className="text-sm font-medium text-gray-700">Drag & drop or click to upload</p>
-                <p className="text-xs text-gray-400 mt-1">PDF, JPG, PNG — Max 5MB</p>
-                <div className="flex items-center justify-center gap-3 mt-3 text-xs text-gray-400">
-                  <ShieldCheck size={12} className="text-green-500" /> Encrypted & stored securely
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setStep(1)}
-                className="flex-1 border border-gray-200 text-gray-600 font-semibold py-4 rounded-xl hover:border-[#5B3DF5] transition-all">
-                Back
-              </button>
-              <button onClick={handleNext} disabled={!form.passengerName || formLoading}
-                className="flex-1 bg-[#5B3DF5] hover:bg-[#4930d4] disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg">
-                {formLoading
-                  ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  : <>Next — Set Price <ArrowRight size={18} /></>}
-              </button>
-            </div>
-          </motion.div>
-        )}
+          </div>
+        );
+      })}
+    </div>
+
+    <div className="mb-6 mt-6">
+      <label className="block text-sm font-semibold text-gray-700 mb-2">Upload Ticket PDF / Screenshot</label>
+      <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-[#5B3DF5] transition-all cursor-pointer">
+        <Upload size={32} className="text-[#5B3DF5] mx-auto mb-3" />
+        <p className="text-sm font-medium text-gray-700">Drag & drop or click to upload</p>
+        <p className="text-xs text-gray-400 mt-1">PDF, JPG, PNG — Max 5MB</p>
+        <div className="flex items-center justify-center gap-3 mt-3 text-xs text-gray-400">
+          <ShieldCheck size={12} className="text-green-500" /> Encrypted & stored securely
+        </div>
+      </div>
+    </div>
+
+    <div className="flex gap-3">
+      <button onClick={() => setStep(1)}
+        className="flex-1 border border-gray-200 text-gray-600 font-semibold py-4 rounded-xl hover:border-[#5B3DF5] transition-all">
+        Back
+      </button>
+      <button onClick={handleNext}
+        disabled={passengerForms.some(p => !p.name) || formLoading}
+        className="flex-1 bg-[#5B3DF5] hover:bg-[#4930d4] disabled:opacity-50 text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg">
+        {formLoading
+          ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          : <>Next — Set Price <ArrowRight size={18} /></>}
+      </button>
+    </div>
+  </motion.div>
+)}
 
         {/* STEP 3 */}
         {step === 3 && (

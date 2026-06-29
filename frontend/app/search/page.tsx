@@ -354,6 +354,9 @@ export default function SearchPage() {
                                 ticket.gender === "Female" ? "bg-pink-50 text-pink-600" : "bg-blue-50 text-blue-600"
                               }`}>{ticket.gender}</span>
                             )}
+                            {ticket.seatType && (
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg">{ticket.seatType}</span>
+                              )}
                           </div>
                         </div>
 

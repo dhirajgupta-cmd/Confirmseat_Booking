@@ -6,10 +6,10 @@ import Link from "next/link";
 import Image from "next/image";
 
 const trustBadges = [
-  { icon: ShieldCheck, label: "100% Secure", sub: "Escrow Payment System" },
-  { icon: Zap, label: "Fast Delivery", sub: "Ticket in 2-5 minutes" },
-  { icon: Users, label: "Verified Users", sub: "KYC & Manual Verification" },
-  { icon: Star, label: "Secure Payout", sub: "Payment after Journey" },
+  { icon: ShieldCheck, label: "100% Secure", sub: "Protected Transfer Process" },
+  { icon: Zap, label: "Fast Assistance", sub: "Transfer help in 2-5 minutes" },
+  { icon: Users, label: "Verified Users", sub: "KYC & Identity Verified" },
+  { icon: Star, label: "Secure Payout", sub: "Released after Journey" },
 ];
 
 export default function Hero() {
@@ -19,16 +19,9 @@ export default function Hero() {
       {/* Background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-[#EEF2FF] via-[#F8FAFC] to-[#E0E7FF]" />
 
-      {/* Train Image — Right side background */}
+      {/* Train Image */}
       <div className="absolute right-0 top-0 bottom-0 w-[55%] overflow-hidden">
-        <Image
-          src="/train.png"
-          alt="Train"
-          fill
-          className="object-cover object-left"
-          priority
-        />
-        {/* Gradient overlay on train — left side fade */}
+        <Image src="/train.png" alt="Train" fill className="object-cover object-left" priority />
         <div className="absolute inset-0 bg-gradient-to-r from-[#EEF2FF] via-[#EEF2FF]/60 to-transparent" />
       </div>
 
@@ -50,7 +43,7 @@ export default function Hero() {
             className="inline-flex items-center gap-2 bg-white border border-[#C7D2FE] text-[#5B3DF5] text-sm font-semibold px-4 py-2 rounded-full mb-6 shadow-sm"
           >
             <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            India's First Secure Train Ticket Marketplace
+            India's First Assisted Train Ticket Transfer Platform
           </motion.div>
 
           {/* Heading */}
@@ -61,7 +54,9 @@ export default function Hero() {
             className="text-5xl lg:text-6xl font-bold text-gray-900 leading-tight mb-4"
             style={{ fontFamily: "Poppins, sans-serif" }}
           >
-            Buy & Sell Train Tickets
+            Transfer Your Train
+            <br />
+            Booking Hassle-Free
             <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#5B3DF5] to-[#7C4DFF]">
               Safe. Fast. Reliable.
@@ -73,11 +68,22 @@ export default function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="text-lg text-gray-600 mb-8 leading-relaxed"
+            className="text-lg text-gray-600 mb-4 leading-relaxed"
           >
-            Have a ticket you can not use? List it.
+            Can't travel on your confirmed ticket? Find someone who needs it.
             <br />
-            Need a last-minute ticket? Find it.
+            Need a last-minute confirmed berth? We'll help you find one.
+          </motion.p>
+
+          {/* Legal note */}
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="text-xs text-gray-400 mb-8 flex items-center gap-1"
+          >
+            <ShieldCheck size={12} className="text-green-500" />
+            All transfers are facilitated as per Indian Railways official transfer guidelines.
           </motion.p>
 
           {/* Buttons */}
@@ -91,13 +97,13 @@ export default function Hero() {
               href="/search"
               className="bg-[#5B3DF5] hover:bg-[#4930d4] text-white font-semibold px-8 py-4 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-1 text-lg"
             >
-              Buy Ticket
+              Find a Transfer
             </Link>
             <Link
               href="/sell"
               className="border-2 border-gray-300 bg-white text-gray-700 hover:border-[#5B3DF5] hover:text-[#5B3DF5] font-semibold px-8 py-4 rounded-xl transition-all duration-200 text-lg"
             >
-              Sell Ticket
+              Transfer My Booking
             </Link>
           </motion.div>
 
@@ -156,8 +162,8 @@ export default function Hero() {
         transition={{ repeat: Infinity, duration: 3 }}
         className="absolute top-32 right-8 bg-white rounded-2xl shadow-xl px-4 py-3 border border-gray-100 z-10"
       >
-        <p className="text-xs text-gray-500">Money Protected</p>
-        <p className="font-bold text-green-600 text-sm">Escrow Active 🔒</p>
+        <p className="text-xs text-gray-500">Transfer Amount</p>
+        <p className="font-bold text-green-600 text-sm">Protected 🔒</p>
       </motion.div>
 
       <motion.div
@@ -165,7 +171,7 @@ export default function Hero() {
         transition={{ repeat: Infinity, duration: 3.5, delay: 1 }}
         className="absolute bottom-32 right-8 bg-white rounded-2xl shadow-xl px-4 py-3 border border-gray-100 z-10"
       >
-        <p className="text-xs text-gray-500">Avg Delivery Time</p>
+        <p className="text-xs text-gray-500">Avg Assistance Time</p>
         <p className="font-bold text-[#5B3DF5] text-sm">Under 3 Minutes ⚡</p>
       </motion.div>
 

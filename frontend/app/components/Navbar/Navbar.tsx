@@ -10,8 +10,8 @@ import { useAuth } from "@/lib/authContext";
 
 const navLinks = [
   { label: "Home", href: "/" },
-  { label: "Buy Ticket", href: "/search" },
-  { label: "Sell Ticket", href: "/sell" },
+  { label: "Find Transfer", href: "/search" },
+  { label: "Transfer Booking", href: "/sell" },
   { label: "Support", href: "/support" },
 ];
 
@@ -35,7 +35,6 @@ export default function Navbar() {
     router.push("/");
   };
 
-  // First name only for display
   const firstName = profile?.name?.split(" ")[0] || "User";
 
   return (
@@ -54,55 +53,36 @@ export default function Navbar() {
 
           {/* Logo */}
           <Link href="/" className="flex items-center">
-            <Image
-              src="/logo.png"
-              alt="ConfirmSeat"
-              width={160}
-              height={60}
-              className="object-contain"
-              style={{ width: "160px", height: "auto" }}
-            />
+            <Image src="/logo.png" alt="ConfirmSeat" width={160} height={60}
+              className="object-contain" style={{ width: "160px", height: "auto" }} />
           </Link>
 
           {/* Desktop Nav Links */}
           <div className="hidden md:flex items-center gap-8">
             {navLinks.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                className="text-gray-700 hover:text-[#5B3DF5] text-sm font-semibold tracking-wide transition-colors duration-200 relative group"
-              >
+              <Link key={link.label} href={link.href}
+                className="text-gray-700 hover:text-[#5B3DF5] text-sm font-semibold tracking-wide transition-colors duration-200 relative group">
                 {link.label}
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-[#5B3DF5] group-hover:w-full transition-all duration-200 rounded-full" />
               </Link>
             ))}
           </div>
 
-          {/* Desktop — Auth Buttons */}
+          {/* Desktop Auth */}
           <div className="hidden md:flex items-center gap-3">
             {loading ? (
-              // Skeleton loader
               <div className="w-24 h-9 bg-gray-100 rounded-xl animate-pulse" />
             ) : user ? (
-              // ── Logged In ──
               <div className="relative">
-                <button
-                  onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="flex items-center gap-2 bg-[#5B3DF5]/8 hover:bg-[#5B3DF5]/15 border border-[#5B3DF5]/20 text-[#5B3DF5] font-semibold text-sm px-4 py-2.5 rounded-xl transition-all duration-200"
-                >
+                <button onClick={() => setDropdownOpen(!dropdownOpen)}
+                  className="flex items-center gap-2 bg-[#5B3DF5]/8 hover:bg-[#5B3DF5]/15 border border-[#5B3DF5]/20 text-[#5B3DF5] font-semibold text-sm px-4 py-2.5 rounded-xl transition-all duration-200">
                   <div className="w-6 h-6 bg-[#5B3DF5] rounded-full flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">
-                      {firstName[0].toUpperCase()}
-                    </span>
+                    <span className="text-white text-xs font-bold">{firstName[0].toUpperCase()}</span>
                   </div>
                   {firstName}
-                  <ChevronDown
-                    size={14}
-                    className={`transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`}
-                  />
+                  <ChevronDown size={14} className={`transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`} />
                 </button>
 
-                {/* Dropdown */}
                 <AnimatePresence>
                   {dropdownOpen && (
                     <motion.div
@@ -110,60 +90,45 @@ export default function Navbar() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 8, scale: 0.95 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute right-0 top-12 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
+                      className="absolute right-0 top-12 w-52 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
                     >
                       <div className="px-4 py-3 border-b border-gray-50">
                         <p className="text-xs text-gray-400 font-medium">Signed in as</p>
-                        <p className="text-sm font-semibold text-gray-800 truncate">
-                          {profile?.name || "User"}
-                        </p>
-                        <p className="text-xs text-gray-400 truncate">
-                          {profile?.phone || user.phoneNumber}
-                        </p>
+                        <p className="text-sm font-semibold text-gray-800 truncate">{profile?.name || "User"}</p>
+                        <p className="text-xs text-gray-400 truncate">{profile?.phone || user.phoneNumber}</p>
                       </div>
-                      <Link
-                        href="/profile"
-                        onClick={() => setDropdownOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 font-medium transition-colors"
-                      >
-                        <User size={15} />
-                        My Profile
+                      <Link href="/profile" onClick={() => setDropdownOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 font-medium transition-colors">
+                        <User size={15} /> My Profile
                       </Link>
-                      <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-red-50 font-medium transition-colors"
-                      >
-                        <LogOut size={15} />
-                        Logout
+                      <Link href="/my-transfers" onClick={() => setDropdownOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 font-medium transition-colors">
+                        🎫 My Transfers
+                      </Link>
+                      <button onClick={handleLogout}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-red-50 font-medium transition-colors">
+                        <LogOut size={15} /> Logout
                       </button>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </div>
             ) : (
-              // ── Logged Out ──
               <>
-                <Link
-                  href="/login"
-                  className="text-gray-700 hover:text-[#5B3DF5] text-sm font-semibold tracking-wide transition-colors px-3 py-2"
-                >
+                <Link href="/login"
+                  className="text-gray-700 hover:text-[#5B3DF5] text-sm font-semibold tracking-wide transition-colors px-3 py-2">
                   Login
                 </Link>
-                <Link
-                  href="/register"
-                  className="bg-[#5B3DF5] hover:bg-[#4930d4] text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg tracking-wide"
-                >
+                <Link href="/register"
+                  className="bg-[#5B3DF5] hover:bg-[#4930d4] text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg tracking-wide">
                   Get Started
                 </Link>
               </>
             )}
           </div>
 
-          {/* Mobile Menu Button */}
-          <button
-            className="md:hidden text-gray-700"
-            onClick={() => setIsMobileOpen(!isMobileOpen)}
-          >
+          {/* Mobile Button */}
+          <button className="md:hidden text-gray-700" onClick={() => setIsMobileOpen(!isMobileOpen)}>
             {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
         </div>
@@ -179,61 +144,46 @@ export default function Navbar() {
             className="md:hidden bg-white border-t border-gray-100 px-4 py-4 shadow-lg"
           >
             {navLinks.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
+              <Link key={link.label} href={link.href}
                 className="block py-3 text-gray-700 hover:text-[#5B3DF5] text-sm font-semibold tracking-wide border-b border-gray-50 transition-colors"
-                onClick={() => setIsMobileOpen(false)}
-              >
+                onClick={() => setIsMobileOpen(false)}>
                 {link.label}
               </Link>
             ))}
 
             <div className="mt-4">
               {user ? (
-                // Mobile — Logged In
                 <div className="space-y-2">
                   <div className="flex items-center gap-3 px-1 py-2">
                     <div className="w-8 h-8 bg-[#5B3DF5] rounded-full flex items-center justify-center">
-                      <span className="text-white text-sm font-bold">
-                        {firstName[0].toUpperCase()}
-                      </span>
+                      <span className="text-white text-sm font-bold">{firstName[0].toUpperCase()}</span>
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-gray-800">{profile?.name}</p>
                       <p className="text-xs text-gray-400">{profile?.phone || user.phoneNumber}</p>
                     </div>
                   </div>
-                  <Link
-                    href="/profile"
-                    onClick={() => setIsMobileOpen(false)}
-                    className="flex items-center gap-2 w-full text-center border border-[#5B3DF5] text-[#5B3DF5] py-2.5 rounded-xl font-semibold text-sm"
-                  >
-                    <User size={15} className="ml-4" />
-                    My Profile
+                  <Link href="/profile" onClick={() => setIsMobileOpen(false)}
+                    className="flex items-center gap-2 w-full border border-[#5B3DF5] text-[#5B3DF5] py-2.5 rounded-xl font-semibold text-sm justify-center">
+                    <User size={15} /> My Profile
                   </Link>
-                  <button
-                    onClick={() => { handleLogout(); setIsMobileOpen(false); }}
-                    className="w-full text-center border border-red-200 text-red-500 py-2.5 rounded-xl font-semibold text-sm"
-                  >
+                  <Link href="/my-transfers" onClick={() => setIsMobileOpen(false)}
+                    className="flex items-center gap-2 w-full border border-gray-200 text-gray-700 py-2.5 rounded-xl font-semibold text-sm justify-center">
+                    🎫 My Transfers
+                  </Link>
+                  <button onClick={() => { handleLogout(); setIsMobileOpen(false); }}
+                    className="w-full text-center border border-red-200 text-red-500 py-2.5 rounded-xl font-semibold text-sm">
                     Logout
                   </button>
                 </div>
               ) : (
-                // Mobile — Logged Out
                 <div className="flex gap-3">
-                  <Link
-                    href="/login"
-                    onClick={() => setIsMobileOpen(false)}
-                    className="flex-1 text-center border border-[#5B3DF5] text-[#5B3DF5] py-2.5 rounded-xl font-semibold text-sm"
-                  >
+                  <Link href="/login" onClick={() => setIsMobileOpen(false)}
+                    className="flex-1 text-center border border-[#5B3DF5] text-[#5B3DF5] py-2.5 rounded-xl font-semibold text-sm">
                     Login
                   </Link>
-                  <Link
-                    href="/register"
-                    onClick={() => setIsMobileOpen(false)}
-                    className="flex-1 text-center bg-[#5B3DF5] text-white py-2.5 rounded-xl font-semibold text-sm"
-                  >
+                  <Link href="/register" onClick={() => setIsMobileOpen(false)}
+                    className="flex-1 text-center bg-[#5B3DF5] text-white py-2.5 rounded-xl font-semibold text-sm">
                     Get Started
                   </Link>
                 </div>

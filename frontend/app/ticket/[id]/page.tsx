@@ -227,7 +227,7 @@ export default function TicketDetailPage() {
                 </div>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm text-gray-500">Platform Fee</span>
-                  <span className="font-semibold text-green-600">Free</span>
+                  <span className="font-semibold text-green-600">₹0.0</span>
                 </div>
                 <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between items-center">
                   <span className="font-bold text-gray-900">Total Amount</span>

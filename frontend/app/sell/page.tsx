@@ -769,12 +769,12 @@ export default function SellTicketPage() {
                     <span className="font-semibold">₹{parseInt(form.price).toLocaleString("en-IN")}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Platform Fee (5%)</span>
-                    <span className="font-semibold text-red-500">- ₹{Math.round(parseInt(form.price) * 0.05).toLocaleString("en-IN")}</span>
+                    <span className="text-gray-500">Platform Fee (0%)</span>
+                    <span className="font-semibold text-red-500"> ₹{Math.round(parseInt(form.price) * 0.0).toLocaleString("en-IN")}</span>
                   </div>
                   <div className="border-t border-gray-200 pt-2 flex justify-between">
                     <span className="font-bold text-gray-900">You will receive</span>
-                    <span className="font-bold text-green-600 text-lg">₹{Math.round(parseInt(form.price) * 0.95).toLocaleString("en-IN")}</span>
+                    <span className="font-bold text-green-600 text-lg">₹{Math.round(parseInt(form.price) *1.0).toLocaleString("en-IN")}</span>
                   </div>
                 </div>
               </motion.div>

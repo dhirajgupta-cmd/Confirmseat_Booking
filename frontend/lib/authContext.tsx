@@ -15,11 +15,12 @@ interface UserProfile {
   isVerified: boolean;
   listingsCount: number;
   purchasesCount: number;
+  createdAt?: { seconds: number; nanoseconds: number } | null;
 }
 
 interface AuthContextType {
-  user: User | null;             // Firebase Auth user
-  profile: UserProfile | null;  // Firestore user data
+  user: User | null;
+  profile: UserProfile | null;
   loading: boolean;
   logout: () => Promise<void>;
 }
@@ -42,8 +43,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
-
-        // Fetch Firestore profile
         try {
           const userRef = doc(db, "users", firebaseUser.uid);
           const userSnap = await getDoc(userRef);
